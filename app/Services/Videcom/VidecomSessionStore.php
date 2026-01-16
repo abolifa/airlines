@@ -23,12 +23,12 @@ class VidecomSessionStore
         return "videcom:cookies:" . $sessionId;
     }
 
-    public function saveCookies(string $sessionId, array $cookies, int $minutes = 30): void
+    public function saveCookies(string $sessionId, array $cookies, int $minutes): void
     {
         Cache::put($this->cookieKey($sessionId), $cookies, now()->addMinutes($minutes));
     }
 
-    public function appendHistory(string $sessionId, string $command, int $status, bool $ok, int $minutes = 60): void
+    public function appendHistory(string $sessionId, string $command, int $status, bool $ok, int $minutes): void
     {
         $key = $this->historyKey($sessionId);
 
