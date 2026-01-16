@@ -7,20 +7,35 @@ use Throwable;
 
 class VidecomClient
 {
-    public function runCommand(string $command): array
+    public function runCommand(string $command, array $cookies = []): array
     {
         $token = (string)config('videcom.token');
         $endpoint = $this->endpoint();
         $xml = $this->buildSoap12MsgEnvelope($token, $command);
 
         try {
+            $domain = parse_url($endpoint, PHP_URL_HOST) ?: '';
+            $jar = Http::cookieJar($cookies, $domain);
+
             $res = Http::withHeaders([
                 'Accept' => 'application/soap+xml, text/xml',
                 'Content-Type' => 'application/soap+xml; charset=utf-8; action="http://videcom.com/RunVRSCommand"',
             ])
+                ->withOptions(['cookies' => $jar])
                 ->timeout((int)config('videcom.timeout', 60))
                 ->withBody($xml, 'application/soap+xml; charset=utf-8')
                 ->post($endpoint);
+
+            $newCookies = $this->extractCookiesFromJar($jar, $domain);
+
+            return [
+                'ok' => $res->successful(),
+                'status' => $res->status(),
+                'endpoint' => $endpoint,
+                'body' => $res->body(),
+                'fault' => $this->extractSoapFault($res->body()),
+                'cookies' => $newCookies,
+            ];
         } catch (Throwable $e) {
             return [
                 'ok' => false,
@@ -29,18 +44,9 @@ class VidecomClient
                 'error' => $e->getMessage(),
                 'body' => null,
                 'fault' => null,
+                'cookies' => $cookies,
             ];
         }
-
-        $body = $res->body();
-
-        return [
-            'ok' => $res->successful(),
-            'status' => $res->status(),
-            'endpoint' => $endpoint,
-            'body' => $body,
-            'fault' => $this->extractSoapFault($body),
-        ];
     }
 
     public function endpoint(): string
@@ -64,6 +70,22 @@ class VidecomClient
   </soap12:Body>
 </soap12:Envelope>
 XML;
+    }
+
+    private function extractCookiesFromJar($jar, string $domain): array
+    {
+        $out = [];
+        foreach ($jar->toArray() as $c) {
+            $name = $c['Name'] ?? null;
+            $value = $c['Value'] ?? null;
+            if ($name === null || $value === null) continue;
+
+            $cookieDomain = $c['Domain'] ?? '';
+            if ($cookieDomain === '' || str_contains($cookieDomain, $domain)) {
+                $out[$name] = $value;
+            }
+        }
+        return $out;
     }
 
     private function extractSoapFault(?string $xml): ?string
