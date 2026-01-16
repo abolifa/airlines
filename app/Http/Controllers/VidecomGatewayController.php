@@ -20,7 +20,7 @@ class VidecomGatewayController extends Controller
             'session_id' => 'nullable|string|max:100',
         ]);
 
-        $sessionId = $validated['session_id'] ?: $store->newSessionId();
+        $sessionId = ($validated['session_id'] ?? null) ?: $store->newSessionId();
         $cookies = $store->loadCookies($sessionId);
 
         $res = $videcom->runCommand($validated['command'], $cookies);
