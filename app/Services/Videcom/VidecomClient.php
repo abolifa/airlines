@@ -13,15 +13,17 @@ class VidecomClient
         $endpoint = $this->endpoint();
         $xml = $this->buildSoap12MsgEnvelope($token, $command);
 
-        try {
-            $domain = parse_url($endpoint, PHP_URL_HOST) ?: '';
-            $jar = Http::cookieJar($cookies, $domain);
+        $domain = parse_url($endpoint, PHP_URL_HOST) ?: '';
+        $jar = $domain ? Http::cookieJar($cookies, $domain) : Http::cookieJar();
 
+        try {
             $res = Http::withHeaders([
                 'Accept' => 'application/soap+xml, text/xml',
                 'Content-Type' => 'application/soap+xml; charset=utf-8; action="http://videcom.com/RunVRSCommand"',
             ])
-                ->withOptions(['cookies' => $jar])
+                ->withOptions([
+                    'cookies' => $jar,
+                ])
                 ->timeout((int)config('videcom.timeout', 60))
                 ->withBody($xml, 'application/soap+xml; charset=utf-8')
                 ->post($endpoint);
@@ -64,8 +66,8 @@ class VidecomClient
 <soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
   <soap12:Body>
     <msg xmlns="http://videcom.com/">
-      <Token>$tokenEsc</Token>
-      <Command>$cmdEsc</Command>
+      <Token>{$tokenEsc}</Token>
+      <Command>{$cmdEsc}</Command>
     </msg>
   </soap12:Body>
 </soap12:Envelope>
@@ -75,16 +77,20 @@ XML;
     private function extractCookiesFromJar($jar, string $domain): array
     {
         $out = [];
+
         foreach ($jar->toArray() as $c) {
             $name = $c['Name'] ?? null;
             $value = $c['Value'] ?? null;
-            if ($name === null || $value === null) continue;
+            if (!$name || $value === null) continue;
 
             $cookieDomain = $c['Domain'] ?? '';
-            if ($cookieDomain === '' || str_contains($cookieDomain, $domain)) {
+
+            // keep cookie if domain matches or cookie has no domain
+            if ($cookieDomain === '' || $domain === '' || str_contains($cookieDomain, $domain)) {
                 $out[$name] = $value;
             }
         }
+
         return $out;
     }
 
