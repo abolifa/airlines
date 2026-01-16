@@ -7,37 +7,20 @@ use Throwable;
 
 class VidecomClient
 {
-    public function runCommand(string $command, array $cookies = []): array
+    public function runCommand(string $command): array
     {
         $token = (string)config('videcom.token');
         $endpoint = $this->endpoint();
         $xml = $this->buildSoap12MsgEnvelope($token, $command);
-
-        $domain = parse_url($endpoint, PHP_URL_HOST) ?: '';
-        $jar = $domain ? Http::cookieJar($cookies, $domain) : Http::cookieJar();
 
         try {
             $res = Http::withHeaders([
                 'Accept' => 'application/soap+xml, text/xml',
                 'Content-Type' => 'application/soap+xml; charset=utf-8; action="http://videcom.com/RunVRSCommand"',
             ])
-                ->withOptions([
-                    'cookies' => $jar,
-                ])
                 ->timeout((int)config('videcom.timeout', 60))
                 ->withBody($xml, 'application/soap+xml; charset=utf-8')
                 ->post($endpoint);
-
-            $newCookies = $this->extractCookiesFromJar($jar, $domain);
-
-            return [
-                'ok' => $res->successful(),
-                'status' => $res->status(),
-                'endpoint' => $endpoint,
-                'body' => $res->body(),
-                'fault' => $this->extractSoapFault($res->body()),
-                'cookies' => $newCookies,
-            ];
         } catch (Throwable $e) {
             return [
                 'ok' => false,
@@ -46,9 +29,18 @@ class VidecomClient
                 'error' => $e->getMessage(),
                 'body' => null,
                 'fault' => null,
-                'cookies' => $cookies,
             ];
         }
+
+        $body = $res->body();
+
+        return [
+            'ok' => $res->successful(),
+            'status' => $res->status(),
+            'endpoint' => $endpoint,
+            'body' => $body,
+            'fault' => $this->extractSoapFault($body),
+        ];
     }
 
     public function endpoint(): string
@@ -66,32 +58,12 @@ class VidecomClient
 <soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
   <soap12:Body>
     <msg xmlns="http://videcom.com/">
-      <Token>{$tokenEsc}</Token>
-      <Command>{$cmdEsc}</Command>
+      <Token>$tokenEsc</Token>
+      <Command>$cmdEsc</Command>
     </msg>
   </soap12:Body>
 </soap12:Envelope>
 XML;
-    }
-
-    private function extractCookiesFromJar($jar, string $domain): array
-    {
-        $out = [];
-
-        foreach ($jar->toArray() as $c) {
-            $name = $c['Name'] ?? null;
-            $value = $c['Value'] ?? null;
-            if (!$name || $value === null) continue;
-
-            $cookieDomain = $c['Domain'] ?? '';
-
-            // keep cookie if domain matches or cookie has no domain
-            if ($cookieDomain === '' || $domain === '' || str_contains($cookieDomain, $domain)) {
-                $out[$name] = $value;
-            }
-        }
-
-        return $out;
     }
 
     private function extractSoapFault(?string $xml): ?string
