@@ -10,15 +10,34 @@ class VidecomClient
     public function runCommand(string $command): array
     {
         $token = (string) config('videcom.token');
-        $endpoint = $this->endpoint();
-        $xml = $this->buildSoap12MsgEnvelope($token, $command);
+        $endpoint = rtrim((string) config('videcom.base_url'), '/') . '?op=RunVRSCommand';
+
+        $tokenEsc = htmlspecialchars($token, ENT_XML1);
+        $cmdEsc   = htmlspecialchars($command, ENT_XML1);
+
+        $xml = <<<XML
+<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
+  <soap12:Body>
+    <msg xmlns="http://videcom.com/">
+      <Token>{$tokenEsc}</Token>
+      <Command>{$cmdEsc}</Command>
+    </msg>
+  </soap12:Body>
+</soap12:Envelope>
+XML;
 
         try {
-            $res = Http::withHeaders([
-                'Accept' => 'application/soap+xml, text/xml',
-                'Content-Type' => 'application/soap+xml; charset=utf-8',
+            $res = Http::withOptions([
+                'version' => 1.1,
             ])
-                ->timeout((int) config('videcom.timeout', 60))
+                ->withHeaders([
+                    'Accept' => 'application/soap+xml, text/xml',
+                    'Content-Type' => 'application/soap+xml; charset=utf-8',
+                    'SOAPAction' => 'http://videcom.com/RunVRSCommand',
+                    'Accept-Encoding' => 'identity',
+                ])
+                ->connectTimeout(10)
+                ->timeout(30)
                 ->withBody($xml, 'application/soap+xml; charset=utf-8')
                 ->post($endpoint);
 
@@ -27,7 +46,7 @@ class VidecomClient
                 'status' => $res->status(),
                 'endpoint' => $endpoint,
                 'body' => $res->body(),
-                'fault' => $this->extractSoapFault($res->body()),
+                'fault' => null,
             ];
         } catch (Throwable $e) {
             return [
@@ -38,43 +57,6 @@ class VidecomClient
                 'body' => null,
                 'fault' => null,
             ];
-        }
-    }
-
-    private function endpoint(): string
-    {
-        return rtrim((string) config('videcom.base_url'), '/') . '?op=RunVRSCommand';
-    }
-
-    private function buildSoap12MsgEnvelope(string $token, string $command): string
-    {
-        $tokenEsc = htmlspecialchars($token, ENT_XML1);
-        $cmdEsc = htmlspecialchars($command, ENT_XML1);
-
-        return <<<XML
-<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">
-  <soap12:Body>
-    <msg xmlns="http://videcom.com/">
-      <Token>$tokenEsc</Token>
-      <Command>$cmdEsc</Command>
-    </msg>
-  </soap12:Body>
-</soap12:Envelope>
-XML;
-    }
-
-    private function extractSoapFault(?string $xml): ?string
-    {
-        if (!$xml) return null;
-
-        try {
-            $clean = preg_replace('/xmlns(:\w+)?="[^"]*"/i', '', $xml);
-            $sxml = simplexml_load_string($clean);
-            return isset($sxml->Body->Fault)
-                ? trim((string) ($sxml->Body->Fault->Reason->Text ?? ''))
-                : null;
-        } catch (Throwable) {
-            return null;
         }
     }
 }
