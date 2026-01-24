@@ -12,22 +12,6 @@ class VidecomSessionStore
         return (string)Str::uuid();
     }
 
-    public function loadCookies(string $sessionId): array
-    {
-        $data = Cache::get($this->cookieKey($sessionId));
-        return is_array($data) ? $data : [];
-    }
-
-    public function cookieKey(string $sessionId): string
-    {
-        return "videcom:cookies:" . $sessionId;
-    }
-
-    public function saveCookies(string $sessionId, array $cookies, int $minutes): void
-    {
-        Cache::put($this->cookieKey($sessionId), $cookies, now()->addMinutes($minutes));
-    }
-
     public function appendHistory(string $sessionId, string $command, int $status, bool $ok, int $minutes): void
     {
         $key = $this->historyKey($sessionId);
@@ -61,7 +45,6 @@ class VidecomSessionStore
 
     public function forget(string $sessionId): void
     {
-        Cache::forget($this->cookieKey($sessionId));
         Cache::forget($this->historyKey($sessionId));
     }
 }

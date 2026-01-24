@@ -11,7 +11,7 @@ class VidecomGatewayController extends Controller
     public function command(Request $request, VidecomClient $videcom, VidecomSessionStore $store)
     {
         $secret = $request->header('X-Proxy-Secret');
-        if (!$secret || !hash_equals((string)config('videcom.proxy_secret'), (string)$secret)) {
+        if (!$secret || !hash_equals((string) config('videcom.proxy_secret'), (string) $secret)) {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
@@ -20,28 +20,22 @@ class VidecomGatewayController extends Controller
             'session_id' => 'nullable|string|max:100',
         ]);
 
-        $sessionId = ($validated['session_id'] ?? null) ?: $store->newSessionId();
+        $sessionId = $validated['session_id'] ?: $store->newSessionId();
 
-        $cookies = $store->loadCookies($sessionId);
-
-        $res = $videcom->runCommand($validated['command'], $cookies);
-
-        $cookieMinutes = (int)config('videcom.session_cookie_minutes', 30);
-        $historyMinutes = (int)config('videcom.session_history_minutes', 120);
-
-        if (isset($res['cookies']) && is_array($res['cookies'])) {
-            $store->saveCookies($sessionId, $res['cookies'], $cookieMinutes);
-        }
+        $res = $videcom->runCommand($validated['command']);
 
         $store->appendHistory(
             $sessionId,
             $validated['command'],
-            (int)($res['status'] ?? 0),
-            (bool)($res['ok'] ?? false),
-            $historyMinutes
+            (int) ($res['status'] ?? 0),
+            (bool) ($res['ok'] ?? false),
+            (int) config('videcom.session_history_minutes', 120)
         );
 
-        return response($res['body'] ?? ($res['fault'] ?? $res['error'] ?? ''), $res['status'] ?: 502)
+        return response(
+            $res['body'] ?? ($res['fault'] ?? $res['error'] ?? ''),
+            $res['status'] ?: 502
+        )
             ->header('Content-Type', 'application/soap+xml; charset=utf-8')
             ->header('X-Videcom-Ok', ($res['ok'] ?? false) ? '1' : '0')
             ->header('X-Videcom-Endpoint', $res['endpoint'] ?? '')
