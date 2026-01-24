@@ -20,6 +20,8 @@ return [
     'allowed_methods' => ['*'],
 
     'allowed_origins' => [
+        'https://airlines.eratech.com.ly',
+        'http://airlines.eratech.com.ly',
         'http://localhost:5173',
         'http://127.0.0.1:5173',
     ],
@@ -36,7 +38,6 @@ return [
     ],
 
     'exposed_headers' => [
-        'X-Videcom-Session',
         'X-Videcom-Ok',
         'X-Videcom-Endpoint',
     ],
